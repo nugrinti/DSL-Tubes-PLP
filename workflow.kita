@@ -1,0 +1,24 @@
+define book B-123 {
+    title = "Clean Code",
+    status = "available",
+    borrower = ""
+};
+
+define A001 {
+    name = "Alice",
+    active = true
+};
+
+borrow book B-123 with due="2025-12-31";
+
+update A001 -> book B-123 set
+    status="borrowed",
+    borrower="A001";
+
+query select title, status where book.status == "borrowed";
+
+if book.status == "borrowed" then {
+    update book B-123 set flag="overdue_check";
+} else {
+    update book B-123 set flag="idle";
+}
