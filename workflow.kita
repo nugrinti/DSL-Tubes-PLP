@@ -4,14 +4,14 @@ define book B-123 {
     borrower = ""
 };
 
-define A001 {
+define member A001 {
     name = "Alice",
     active = true
 };
 
 borrow book B-123 with due="2025-12-31";
 
-update A001 -> book B-123 set
+update member A001 -> book B-123 set
     status="borrowed",
     borrower="A001";
 
