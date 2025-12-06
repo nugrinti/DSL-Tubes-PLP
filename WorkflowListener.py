@@ -116,6 +116,24 @@ class WorkflowListener(ParseTreeListener):
         pass
 
 
+    # Enter a parse tree produced by WorkflowParser#thenBlock.
+    def enterThenBlock(self, ctx:WorkflowParser.ThenBlockContext):
+        pass
+
+    # Exit a parse tree produced by WorkflowParser#thenBlock.
+    def exitThenBlock(self, ctx:WorkflowParser.ThenBlockContext):
+        pass
+
+
+    # Enter a parse tree produced by WorkflowParser#elseBlock.
+    def enterElseBlock(self, ctx:WorkflowParser.ElseBlockContext):
+        pass
+
+    # Exit a parse tree produced by WorkflowParser#elseBlock.
+    def exitElseBlock(self, ctx:WorkflowParser.ElseBlockContext):
+        pass
+
+
     # Enter a parse tree produced by WorkflowParser#condition.
     def enterCondition(self, ctx:WorkflowParser.ConditionContext):
         pass

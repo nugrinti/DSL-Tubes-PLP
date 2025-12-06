@@ -1,4 +1,5 @@
 import sys
+import json
 from antlr4 import *
 from WorkflowLexer import WorkflowLexer
 from WorkflowParser import WorkflowParser
@@ -13,15 +14,9 @@ class WorkflowState:
         self.members = {}   # e.g. { "A001": {...} }
 
     def key_item(self, type_, id_):
-        if type_ is None or id_ is None:
-            return None
         return f"{type_} {id_}"
 
-    def key_member(self, id_):
-        return id_
-
 state = WorkflowState()
-
 
 # -----------------------------
 #   VISITOR IMPLEMENTATION
@@ -34,170 +29,96 @@ class ExecVisitor(WorkflowVisitor):
             self.visit(stmt)
         return state
 
-    # txnStmt alternative labelled as txnStatement
-    def visitTxnStatement(self, ctx):
-        txn = ctx.txnStmt()
-        action = txn.action().getText()
-        t = txn.target()
-
-        # Extract item_type and item_id robustly
-        item_type = None
-        item_id = None
-        actor = None
-
-        # target : ID ITEM_ID  | MEMBER_ID ARROW ID ITEM_ID
-        if t.MEMBER_ID():
-            actor = t.MEMBER_ID().getText()
-            # when MEMBER_ID ARROW ID ITEM_ID, ID() exists (the item type)
-            ids = t.ID()
-            if ids:
-                item_type = ids[0].getText()
-            if t.ITEM_ID():
-                item_id = t.ITEM_ID().getText()
-        else:
-            # direct form: ID ITEM_ID
-            ids = t.ID()
-            if ids:
-                item_type = ids[0].getText()
-            if t.ITEM_ID():
-                item_id = t.ITEM_ID().getText()
-
-        item_key = state.key_item(item_type, item_id)
-        print(f"[TXN] {action.upper()} {item_key} by {actor}")
-
-        # minimal effect (guard if item exists)
-        if item_key and item_key in state.items:
-            if action == "borrow":
-                state.items[item_key]["status"] = "borrowed"
-            elif action == "return":
-                state.items[item_key]["status"] = "available"
-        else:
-            # if item missing, warn (do not crash)
-            if item_key is None:
-                print(f"  [WARN] txn target incomplete")
-            else:
-                print(f"  [WARN] item not defined: {item_key}")
-
-        return None
-
     # define item/member
-    def visitDefineStatement(self, ctx):
+    def visitDefineStmt(self, ctx):
         # ctx is a statement context; child defineStmt() holds actual define
-        defn = ctx.defineStmt()
-        # memberDef : MEMBER_ID LBRACE ...
-        if defn.itemDef():
-            # itemDef was parsed as: ID ITEM_ID { fieldList? }
-            # use ID() (parser-level) not ITEM_TYPE lexer token
-            id_tokens = defn.itemDef().ID()
-            item_type = id_tokens[0].getText() if id_tokens else None
-            item_id = defn.itemDef().ITEM_ID().getText() if defn.itemDef().ITEM_ID() else None
+        if ctx.BOOK():
+            item_type = "book"
+            item_id = ctx.ITEM_ID().getText()
             k = state.key_item(item_type, item_id)
             state.items[k] = {}
-            fld = defn.itemDef().fieldList()
-            if fld:
-                for f in fld.fieldAssign():
-                    key = f.field().getText()
-                    val = self._evalValue(f.value())
-                    state.items[k][key] = val
-            print(f"[DEFINE ITEM] {k}")
+            if ctx.fieldList():
+                for f in ctx.fieldList().fieldAssign():
+                    state.items[k][f.field().getText()] = self._evalValue(f.value())
+            print(f"[DEFINE BOOK] {k}")
 
-        elif defn.memberDef():
-            member_id = defn.memberDef().MEMBER_ID().getText() if defn.memberDef().MEMBER_ID() else None
+        elif ctx.MEMBER():
+            member_id = ctx.MEMBER_ID().getText()
             state.members[member_id] = {}
-            fld = defn.memberDef().fieldList()
-            if fld:
-                for f in fld.fieldAssign():
-                    key = f.field().getText()
-                    val = self._evalValue(f.value())
-                    state.members[member_id][key] = val
+            if ctx.fieldList():
+                for f in ctx.fieldList().fieldAssign():
+                    state.members[member_id][f.field().getText()] = self._evalValue(f.value())
             print(f"[DEFINE MEMBER] {member_id}")
 
-        return None
+    # txnStmt alternative labelled as txnStatement
+    def visitTxnStmt(self, ctx):
+        action = ctx.action().getText()
+        t = ctx.target()
 
-    # update
-    def visitUpdateStatement(self, ctx):
-        upd = ctx.updateStmt()
-        t = upd.target()
-
-        # extract keys robustly (same logic as txn)
-        item_type = None
-        item_id = None
         actor = None
-
         if t.MEMBER_ID():
             actor = t.MEMBER_ID().getText()
-            ids = t.ID()
-            if ids:
-                item_type = ids[0].getText()
-            if t.ITEM_ID():
-                item_id = t.ITEM_ID().getText()
-        else:
-            ids = t.ID()
-            if ids:
-                item_type = ids[0].getText()
-            if t.ITEM_ID():
-                item_id = t.ITEM_ID().getText()
 
-        key = state.key_item(item_type, item_id)
+        itype = "book"
+        iid = t.ITEM_ID().getText()
+        key = state.key_item(itype, iid)
+
+        print(f"[TXN] {action.upper()} {key} by {actor}")
+
+        # minimal effect (guard if item exists)
+        if key in state.items:
+            if action == "borrow":
+                state.items[key]["status"] = "borrowed"
+            elif action == "return":
+                state.items[key]["status"] = "available"
+
+    # update
+    def visitUpdateStmt(self, ctx):
+        t = ctx.target()
+
+        # extract keys robustly (same logic as txn)
+        itype = "book"
+        iid = t.ITEM_ID().getText()
+        key = state.key_item(itype, iid)
+
         print(f"[UPDATE] {key}")
 
         if key not in state.items:
             print(f"  [WARN] item not defined: {key} (skipping updates)")
             return None
 
-        fldlist = upd.fieldList()
-        if fldlist:
-            for f in fldlist.fieldAssign():
-                field = f.field().getText()
-                val = self._evalValue(f.value())
-                state.items[key][field] = val
-                print(f"   set {field} = {val}")
-
-        return None
+        for f in ctx.fieldList().fieldAssign():
+            field = f.field().getText()
+            val = self._evalValue(f.value())
+            state.items[key][field] = val
+            print(f"   set {field} = {val}")
 
     # query
-    def visitQueryStatement(self, ctx):
+    def visitQueryStmt(self, ctx):
         print("[QUERY]")
-        q = ctx.queryStmt()
-        sel = q.selectClause().selectFields().getText() if q.selectClause() else "*"
-        where = q.whereClause().condition().getText() if q.whereClause() else None
-        print(f"  select: {sel}")
-        print(f"  where : {where}")
-        # naive evaluator: print matching items if where is simple "type.field == value"
-        if where:
-            # very naive parsing: split on spaces (sufficient for simple cases)
-            parts = where.split()
-            if len(parts) >= 3:
-                left = parts[0]
-                op = parts[1]
-                right = parts[2].strip('"')
-                for k, props in state.items.items():
-                    if '.' in left:
-                        tname, fname = left.split('.', 1)
-                        if props.get('_type') == tname or True:  # we don't store _type reliably here; just check field
-                            if fname in props:
-                                val = props[fname]
-                                ok = (op == '==' and str(val) == right) or (op == '!=' and str(val) != right)
-                                if ok:
-                                    print(f"  match: {k}: {props}")
-        else:
-            for item_key, fields in state.items.items():
-                print(f"  - {item_key}: {fields}")
-        return None
+        
+        condtxt = None
+        if ctx.whereClause():
+            condtxt = ctx.whereClause().condition().getText()
+            print("  where:", condtxt)
 
+        for k, v in state.items.items():
+            print("  item:", k, v)
+                
     # if
-    def visitIfStatement(self, ctx):
-        if_ctx = ctx.ifStmt()
-        cond_ctx = if_ctx.condition()
-        cond = self._evalCondition(cond_ctx)
-        print(f"[IF] condition -> {cond}")
-        if cond:
+    def visitIfStmt(self, ctx):
+        cond = ctx.condition()
+        text_form = cond.getText()
+        result = self._evalCondition(cond)
+
+        print(f"[IF] {text_form} -> {result}")
+        if result:
             # then block: statement(0) is a list
-            for s in if_ctx.statement(0):
+            for s in ctx.thenBlock().statement():
                 self.visit(s)
         else:
-            if if_ctx.ELSE():
-                for s in if_ctx.statement(1):
+            if ctx.elseBlock():
+                for s in ctx.elseBlock().statement():
                     self.visit(s)
         return None
 
@@ -219,6 +140,20 @@ class ExecVisitor(WorkflowVisitor):
         if v.FALSE(): 
             return False
         return None
+    
+    def _get_field_value(self, field_name):
+        """
+        field_name bisa 'book.status' atau hanya 'status'
+        """
+        if "." in field_name:
+            type_, field = field_name.split(".")
+        else:
+            field = field_name
+
+        for k, obj in state.items.items():
+            if field in obj:
+                return obj[field]
+        return None
 
     def _evalCondition(self, c):
         # defensive: ensure c and expression exist
@@ -231,24 +166,16 @@ class ExecVisitor(WorkflowVisitor):
         op = expr.COMPARISON().getText()
         val = self._evalValue(expr.value())
 
-        # lookup field in any item
-        for k, f in state.items.items():
-            # field may be dotted like book.status or just status
-            if '.' in field:
-                # prefer match on suffix name
-                parts = field.split('.', 1)
-                fname = parts[1]
-            else:
-                fname = field
-            if fname in f:
-                left = f[fname]
-                if op == "==": return left == val
-                if op == "!=": return left != val
-                try:
-                    if op == "<": return left < val
-                    if op == ">": return left > val
-                except Exception:
-                    return False
+        left = self._get_field_value(field)
+
+        if left is None:
+            return False
+        
+        if op == "==": return left == val
+        if op == "!=": return left != val
+        if op == "<": return left < val
+        if op == ">": return left > val
+              
         return False
 
 
@@ -275,9 +202,10 @@ def run_dsl(filename):
     state_out = visitor.visit(tree)
 
     print("\nFinal State:")
-    print("Items:", state_out.items)
-    print("Members:", state_out.members)
-
+    print("Items:")
+    print(json.dumps(state_out.items,indent=4))
+    print("Members:")
+    print(json.dumps(state_out.members,indent=4))
 
 if __name__ == "__main__":
     run_dsl("workflow.kita")

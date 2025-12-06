@@ -69,6 +69,16 @@ class WorkflowVisitor(ParseTreeVisitor):
         return self.visitChildren(ctx)
 
 
+    # Visit a parse tree produced by WorkflowParser#thenBlock.
+    def visitThenBlock(self, ctx:WorkflowParser.ThenBlockContext):
+        return self.visitChildren(ctx)
+
+
+    # Visit a parse tree produced by WorkflowParser#elseBlock.
+    def visitElseBlock(self, ctx:WorkflowParser.ElseBlockContext):
+        return self.visitChildren(ctx)
+
+
     # Visit a parse tree produced by WorkflowParser#condition.
     def visitCondition(self, ctx:WorkflowParser.ConditionContext):
         return self.visitChildren(ctx)

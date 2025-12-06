@@ -1,7 +1,6 @@
 define book B-123 {
     title = "Clean Code",
-    status = "available",
-    borrower = ""
+    status = "available"
 };
 
 define member A001 {
@@ -9,7 +8,7 @@ define member A001 {
     active = true
 };
 
-borrow book B-123 with due="2025-12-31";
+borrow member A001 -> book B-123 with due="2025-12-31";
 
 update member A001 -> book B-123 set
     status="borrowed",

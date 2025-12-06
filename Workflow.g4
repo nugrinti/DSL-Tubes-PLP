@@ -15,13 +15,14 @@ txnStmt : action target (WITH paramList)? ;
 action : BORROW | RETURN | RESERVE | EXTEND | MARK_LOST ;
 
 target
-    : ID ITEM_ID                // use ID (type name) + ITEM_ID
-    | MEMBER_ID ARROW ID ITEM_ID
+    : BOOK ITEM_ID                          // book B-123
+    | MEMBER MEMBER_ID ARROW BOOK ITEM_ID   // member A001 -> book B-123  
+    | MEMBER_ID ARROW BOOK ITEM_ID          // A001 -> book B-123
     ;
 
 defineStmt
-    : DEFINE ID ITEM_ID LBRACE fieldList? RBRACE   // define book B-123 {..}
-    | DEFINE MEMBER_ID LBRACE fieldList? RBRACE    // define A001 {..}
+    : DEFINE BOOK ITEM_ID LBRACE fieldList? RBRACE   // define book B-123 {..}
+    | DEFINE MEMBER MEMBER_ID LBRACE fieldList? RBRACE    // define member A001 {..}
     ;
 
 updateStmt : UPDATE target SET fieldList ;
@@ -32,7 +33,10 @@ selectClause : SELECT selectFields ;
 selectFields : STAR | field (COMMA field)* ;
 whereClause : WHERE condition ;
 
-ifStmt : IF condition THEN LBRACE statement* RBRACE (ELSE LBRACE statement* RBRACE)? ;
+ifStmt : IF condition THEN thenBlock (ELSE elseBlock)? ;
+
+thenBlock : LBRACE statement* RBRACE ;
+elseBlock : LBRACE statement* RBRACE ;
 
 condition : expression (LOGICAL_OP expression)* ;
 expression : field COMPARISON value | LPAREN condition RPAREN ;
@@ -58,13 +62,15 @@ THEN        : 'then';
 ELSE        : 'else';
 WITH        : 'with';
 SET         : 'set';
+BOOK        : 'book';
+MEMBER      : 'member';
 
 TRUE        : 'true';
 FALSE       : 'false';
 
 // specific tokens BEFORE ID
-ITEM_ID     : [A-Z][A-Z0-9\-]* ;  // B-123
 MEMBER_ID   : 'A' [0-9]+ ;   // contoh A001, A123
+ITEM_ID     : [A-Z][A-Z0-9\-]* ;  // B-123
 COMPARISON  : '==' | '!=' | '<=' | '>=' | '<' | '>';
 LOGICAL_OP  : 'and' | 'or';
 
@@ -77,7 +83,7 @@ NUMBER : [0-9]+ ('.' [0-9]+)? ;
 ID : [a-zA-Z_][a-zA-Z0-9_]* ;
 
 // parser-level field rule
-field : ID ('.' ID)* ;
+field : (ID | BOOK | MEMBER) ('.' ID)* ;
 
 // values
 value : STRING | NUMBER | DATE | TRUE | FALSE ;
